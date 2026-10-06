@@ -1,0 +1,603 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Fast Trade Calc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one thumb-friendly column. Sticky result strip on top, inputs below it, breakdown last, tab bar fixed at the bottom. Light theme only, by request. */
+:root {
+  --bg: #F5F7F6;
+  --surface: #FFFFFF;
+  --ink: #14201B;
+  --muted: #66746D;
+  --line: #E1E7E3;
+  --accent: #1E4FD8;
+  --accent-bg: #EAF0FD;
+  --accent-ring: rgba(30, 79, 216, 0.16);
+  --gain: #087A50;
+  --gain-bg: #E4F3EB;
+  --gain-line: #BCE0CD;
+  --loss: #C73030;
+  --loss-bg: #FBE8E7;
+  --loss-line: #F1C3C0;
+  --flat-bg: #ECF0EE;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-num: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto;
+  max-width: 560px;
+  padding-inline: 16px;
+  padding-block: 0 104px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font-family: var(--font-ui); cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; align-items: center; justify-content: space-between; padding-block: 14px 2px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+.tag { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+.ghost { border: 0; background: transparent; color: var(--accent); font-size: 14px; font-weight: 500; min-height: 40px; padding-inline: 4px; }
+
+/* Result strip */
+.hero {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  margin-top: 8px; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--flat-bg);
+}
+.hero[data-state="gain"] { background: var(--gain-bg); border-color: var(--gain-line); }
+.hero[data-state="loss"] { background: var(--loss-bg); border-color: var(--loss-line); }
+.h-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 12px; }
+.h-main { min-width: 0; }
+.h-label { font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.h-value { font-family: var(--font-num); font-weight: 600; font-size: clamp(28px, 9vw, 40px); letter-spacing: -0.02em; line-height: 1.15; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.hero[data-state="gain"] .h-value { color: var(--gain); }
+.hero[data-state="loss"] .h-value { color: var(--loss); }
+.pill { font-family: var(--font-num); font-weight: 600; font-size: 14px; padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
+.pill.gain { background: var(--gain); color: #fff; }
+.pill.loss { background: var(--loss); color: #fff; }
+.pill.flat { background: var(--line); color: var(--ink); }
+.hero-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hero-two .h-value { font-size: clamp(20px, 6.2vw, 28px); }
+.hero-two .gain-t { color: var(--gain); }
+.hero-two .loss-t { color: var(--loss); }
+.hero-foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--muted); }
+.hero-foot b { font-family: var(--font-num); font-weight: 600; color: var(--ink); }
+
+/* Inputs */
+.form { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: 12px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.inp { display: flex; align-items: center; min-width: 0; padding-inline: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.inp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.inp > span { margin-right: 6px; font-family: var(--font-num); color: var(--muted); }
+.inp input { flex: 1; width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: var(--font-num); font-size: 18px; font-weight: 500; padding-block: 12px; font-variant-numeric: tabular-nums; }
+.inp input::placeholder { color: #A7B2AC; }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; background: var(--flat-bg); border-radius: 10px; }
+.seg button { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; }
+.seg button[aria-pressed="true"][data-side="long"] { background: var(--gain); color: #fff; }
+.seg button[aria-pressed="true"][data-side="short"] { background: var(--loss); color: #fff; }
+
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chips .cl { font-size: 12px; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; margin-right: 2px; }
+.chip { min-height: 34px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font-family: var(--font-num); font-size: 13px; font-weight: 500; }
+.chip:active { background: var(--accent-bg); border-color: var(--accent); }
+
+/* Average rows */
+.avrows { display: flex; flex-direction: column; gap: 10px; counter-reset: buy; }
+.avrow { display: grid; grid-template-columns: 22px minmax(0, 1.3fr) minmax(0, 1fr) 40px; align-items: center; gap: 8px; counter-increment: buy; }
+.avrow::before { content: counter(buy); font-family: var(--font-num); font-size: 13px; color: var(--muted); text-align: center; }
+.rm { width: 40px; height: 44px; border: 0; background: transparent; color: var(--muted); font-size: 22px; border-radius: 10px; }
+.add { min-height: 44px; border: 1px dashed #B7C2BB; border-radius: 10px; background: transparent; color: var(--accent); font-size: 14px; font-weight: 600; }
+
+/* Breakdown */
+.sec { margin: 22px 0 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.stats { margin: 4px 0 0; padding: 0; }
+.stats > div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.stats dt { color: var(--muted); font-size: 14px; }
+.stats dd { margin: 0; min-width: 0; text-align: right; overflow-wrap: anywhere; font-family: var(--font-num); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stats dd.gain { color: var(--gain); }
+.stats dd.loss { color: var(--loss); }
+.note { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-bg); color: var(--ink); font-size: 14px; }
+
+/* Tab bar */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); }
+.tabs-in { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; max-width: 560px; margin: 0 auto; }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 54px; padding: 6px 0; min-width: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; }
+.tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tab[aria-selected="true"] { background: var(--accent-bg); color: var(--accent); }
+
+.hero.flow { position: static; margin-top: 18px; }
+.hero[data-state] .h-value.ink-t { color: var(--ink); }
+.cmp { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.25fr); margin-top: 6px; }
+.cmp > div { padding: 11px 0; border-bottom: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+.cmp .ch { font-size: 12px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); text-align: right; padding-block: 8px; }
+.cmp .rl { color: var(--muted); font-size: 14px; }
+.cmp .rv { text-align: right; font-family: var(--font-num); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.cmp .rv.gain { color: var(--gain); }
+.cmp .rv.loss { color: var(--loss); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="top">
+  <div class="brand">Fast Trade Calc <span class="tag" id="exTag">Example</span></div>
+  <button class="ghost" id="clearBtn" type="button">Clear all</button>
+</header>
+
+<main>
+  <!-- Invest: shares from amount, profit from sell price -->
+  <section class="panel" id="panel-iv" role="tabpanel" aria-labelledby="tab-iv">
+    <div class="form">
+      <div class="grid2">
+        <div class="field"><label for="ivBuy">Buy price (1 share)</label><div class="inp"><span>₹</span><input id="ivBuy" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+        <div class="field"><label for="ivSell">Sell price (1 share)</label><div class="inp"><span>₹</span><input id="ivSell" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+      </div>
+      <div class="field"><label for="ivAmt">Amount to invest</label><div class="inp"><span>₹</span><input id="ivAmt" data-k inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="0"></div></div>
+    </div>
+    <div class="hero flow" id="ivHero" data-state="flat">
+      <div class="hero-two">
+        <div class="h-main"><div class="h-label">Shares to buy</div><div class="h-value ink-t" id="ivQty">0</div></div>
+        <div class="h-main"><div class="h-label" id="ivPLbl">Total P/L</div><div class="h-value" id="ivPL">₹0.00</div></div>
+      </div>
+      <div class="hero-foot"><span id="ivFoot">Invested ₹0.00</span><span class="pill flat" id="ivPill">–</span></div>
+    </div>
+    <div id="ivNote" class="note" hidden></div>
+    <h2 class="sec">Per share and total</h2>
+    <div class="cmp" id="ivCmp"></div>
+  </section>
+
+  <!-- P/L -->
+  <section class="panel" id="panel-pl" role="tabpanel" aria-labelledby="tab-pl" hidden>
+    <div class="hero" id="plHero" data-state="flat">
+      <div class="h-row">
+        <div class="h-main">
+          <div class="h-label" id="plLbl">Net P/L</div>
+          <div class="h-value" id="plVal">₹0.00</div>
+        </div>
+        <span class="pill flat" id="plPill">0.00%</span>
+      </div>
+    </div>
+    <div class="form">
+      <div class="seg" data-seg="pl" role="group" aria-label="Trade direction">
+        <button type="button" data-side="long" aria-pressed="true">Long (Buy first)</button>
+        <button type="button" data-side="short" aria-pressed="false">Short (Sell first)</button>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="plBuy">Buy price</label><div class="inp"><span>₹</span><input id="plBuy" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+        <div class="field"><label for="plSell">Sell price</label><div class="inp"><span>₹</span><input id="plSell" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+        <div class="field"><label for="plQty">Quantity</label><div class="inp"><input id="plQty" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0"></div></div>
+        <div class="field"><label for="plChg">Charges (total)</label><div class="inp"><span>₹</span><input id="plChg" data-k inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="0"></div></div>
+      </div>
+    </div>
+    <h2 class="sec">Breakdown</h2>
+    <dl class="stats" id="plStats"></dl>
+  </section>
+
+  <!-- Target and stop -->
+  <section class="panel" id="panel-tg" role="tabpanel" aria-labelledby="tab-tg" hidden>
+    <div class="hero" id="tgHero" data-state="flat">
+      <div class="hero-two">
+        <div class="h-main"><div class="h-label">Profit at target</div><div class="h-value gain-t" id="tgProfit">₹0.00</div></div>
+        <div class="h-main"><div class="h-label">Loss at stop</div><div class="h-value loss-t" id="tgLoss">₹0.00</div></div>
+      </div>
+      <div class="hero-foot"><span>Risk : Reward</span><b id="tgRR">–</b></div>
+    </div>
+    <div class="form">
+      <div class="seg" data-seg="tg" role="group" aria-label="Trade direction">
+        <button type="button" data-side="long" aria-pressed="true">Long</button>
+        <button type="button" data-side="short" aria-pressed="false">Short</button>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="tgEntry">Entry price</label><div class="inp"><span>₹</span><input id="tgEntry" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+        <div class="field"><label for="tgQty">Quantity</label><div class="inp"><input id="tgQty" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0"></div></div>
+        <div class="field"><label for="tgPct">Target %</label><div class="inp"><span>%</span><input id="tgPct" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0"></div></div>
+        <div class="field"><label for="tgPx">Target price</label><div class="inp"><span>₹</span><input id="tgPx" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+      </div>
+      <div class="chips" data-chips="tgPct"><span class="cl">Target</span>
+        <button class="chip" type="button" data-v="1">1%</button><button class="chip" type="button" data-v="2">2%</button><button class="chip" type="button" data-v="3">3%</button><button class="chip" type="button" data-v="5">5%</button><button class="chip" type="button" data-v="10">10%</button>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="slPct">Stop loss %</label><div class="inp"><span>%</span><input id="slPct" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0"></div></div>
+        <div class="field"><label for="slPx">Stop price</label><div class="inp"><span>₹</span><input id="slPx" data-k inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="0.00"></div></div>
+      </div>
+      <div class="chips" data-chips="slPct"><span class="cl">Stop</span>
+        <button class="chip" type="button" data-v="0.5">0.5%</button><button class="chip" type="button" data-v="1">1%</button><button class="chip" type="button" data-v="2">2%</button><button class="chip" type="button" data-v="3">3%</button><button class="chip" type="button" data-v="5">5%</button>
+      </div>
+    </div>
+    <h2 class="sec">Breakdown</h2>
+    <dl class="stats" id="tgStats"></dl>
+  </section>
+
+  <!-- Position size -->
+  <section class="panel" id="panel-sz" role="tabpanel" aria-labelledby="tab-sz" hidden>
+    <div class="hero" id="szHero" data-state="flat">
+      <div class="h-row">
+        <div class="h-main">
+          <div class="h-label" id="szLbl">Buy quantity</div>
+          <div class="h-value" id="szVal">0</div>
+        </div>
+        <span class="pill flat" id="szPill">Risk ₹0</span>
+      </div>
+    </div>
+    <div class="form">
+      <div class="grid2">
+        <div class="field"><label for="szCap">Capital</label><div class="inp"><span>₹</span><input id="szCap" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0"></div></div>
+        <div class="field"><label for="szRisk">Risk per trade</label><div class="inp"><span>%</span><input id="szRisk" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="1"></div></div>
+        <div class="field"><label for="szEntry">Entry price</label><div class="inp"><span>₹</span><input id="szEntry" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+        <div class="field"><label for="szSl">Stop price</label><div class="inp"><span>₹</span><input id="szSl" data-k inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="0.00"></div></div>
+        <div class="field"><label for="szR">Reward multiple</label><div class="inp"><span>R</span><input id="szR" data-k inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="2"></div></div>
+      </div>
+    </div>
+    <div id="szNote" class="note" hidden></div>
+    <h2 class="sec">Breakdown</h2>
+    <dl class="stats" id="szStats"></dl>
+  </section>
+
+  <!-- Average -->
+  <section class="panel" id="panel-av" role="tabpanel" aria-labelledby="tab-av" hidden>
+    <div class="hero" id="avHero" data-state="flat">
+      <div class="h-row">
+        <div class="h-main">
+          <div class="h-label">Average buy price</div>
+          <div class="h-value" id="avVal">₹0.00</div>
+        </div>
+        <span class="pill flat" id="avPill">P/L –</span>
+      </div>
+    </div>
+    <div class="form">
+      <div class="avrows" id="avRows"></div>
+      <button class="add" id="addRow" type="button">+ Add another buy</button>
+      <div class="field"><label for="avLtp">Current price (optional)</label><div class="inp"><span>₹</span><input id="avLtp" data-k inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="0.00"></div></div>
+    </div>
+    <h2 class="sec">Breakdown</h2>
+    <dl class="stats" id="avStats"></dl>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Calculators">
+  <div class="tabs-in" role="tablist">
+    <button class="tab" id="tab-iv" data-tab="iv" role="tab" aria-selected="true" aria-controls="panel-iv" type="button"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5v5M17.5 9.5v5"/></svg>Invest</button>
+    <button class="tab" id="tab-pl" data-tab="pl" role="tab" aria-selected="false" aria-controls="panel-pl" type="button"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>P/L</button>
+    <button class="tab" id="tab-tg" data-tab="tg" role="tab" aria-selected="false" aria-controls="panel-tg" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Target</button>
+    <button class="tab" id="tab-sz" data-tab="sz" role="tab" aria-selected="false" aria-controls="panel-sz" type="button"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Size</button>
+    <button class="tab" id="tab-av" data-tab="av" role="tab" aria-selected="false" aria-controls="panel-av" type="button"><svg viewBox="0 0 24 24"><path d="M5 9h14"/><path d="M5 15h14"/><path d="M12 3v4M12 17v4"/></svg>Average</button>
+  </div>
+</nav>
+
+<script>
+(function () {
+  var KEY = 'fast-trade-calc-v2';
+  var state = { tab: 'iv', sides: { pl: 'long', tg: 'long' } };
+  var DEFAULTS = { ivBuy: '100', ivSell: '110', ivAmt: '10000', plBuy: '1250', plSell: '1284.5', plQty: '100', plChg: '40',
+    tgEntry: '1250', tgQty: '100', tgPct: '3', slPct: '1.5',
+    szCap: '500000', szRisk: '1', szEntry: '1250', szSl: '1235', szR: '2', avLtp: '1215' };
+  var ROWS_DEFAULT = [['1250', '50'], ['1190', '100']];
+  var rowSeq = 0;
+
+  function $(id) { return document.getElementById(id); }
+  function num(id) { var v = parseFloat(String($(id).value).replace(/,/g, '')); return isFinite(v) ? v : NaN; }
+  function val(id) { var v = num(id); return isNaN(v) ? 0 : v; }
+
+  var f0 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 4 });
+  function fmt(v, d) { return new Intl.NumberFormat('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d }).format(v); }
+  function inr(v, o) {
+    o = o || {}; var d = o.d == null ? 2 : o.d;
+    if (!isFinite(v)) return '–';
+    if (Math.abs(v) < 0.5 * Math.pow(10, -d)) v = 0;
+    var s = v < 0 ? '−' : (o.sign && v > 0 ? '+' : '');
+    return s + '₹' + fmt(Math.abs(v), d);
+  }
+  function pc(v, sign) {
+    if (!isFinite(v)) return '–';
+    if (Math.abs(v) < 0.005) v = 0;
+    var s = v < 0 ? '−' : (sign && v > 0 ? '+' : '');
+    return s + fmt(Math.abs(v), 2) + '%';
+  }
+  function cls(v) { return v > 0.005 ? 'gain' : (v < -0.005 ? 'loss' : 'flat'); }
+  function setStats(id, rows) {
+    $(id).innerHTML = rows.map(function (r) {
+      return '<div><dt>' + r[0] + '</dt><dd class="' + (r[2] || '') + '">' + r[1] + '</dd></div>';
+    }).join('');
+  }
+  function setPill(id, text, c) { var el = $(id); el.textContent = text; el.className = 'pill ' + c; }
+
+  /* P/L */
+  function calcPL() {
+    var b = val('plBuy'), s = val('plSell'), q = val('plQty'), c = val('plChg');
+    var long = state.sides.pl === 'long';
+    var gross = (long ? s - b : b - s) * q;
+    var net = gross - c;
+    var invested = b * q;
+    var ret = invested > 0 ? net / invested * 100 : 0;
+    var move = b > 0 ? (long ? s - b : b - s) / b * 100 : 0;
+    var be = q > 0 ? (long ? b + c / q : b - c / q) : b;
+    var st = cls(net);
+    $('plHero').setAttribute('data-state', st);
+    $('plLbl').textContent = st === 'gain' ? 'Net profit' : (st === 'loss' ? 'Net loss' : 'Net P/L');
+    $('plVal').textContent = inr(net, { sign: true });
+    setPill('plPill', pc(ret, true), st);
+    setStats('plStats', [
+      ['Invested', inr(invested)],
+      ['Exit value', inr(s * q)],
+      ['Gross P/L', inr(gross, { sign: true }), cls(gross)],
+      ['Charges', inr(c)],
+      ['Price move', pc(move, true), cls(move)],
+      ['Breakeven price', inr(be)]
+    ]);
+  }
+
+  /* Target and stop */
+  function isLong(k) { return state.sides[k] === 'long'; }
+  function pxFromPct(which) {
+    var e = val('tgEntry'), long = isLong('tg');
+    var pctId = which === 'tg' ? 'tgPct' : 'slPct', pxId = which === 'tg' ? 'tgPx' : 'slPx';
+    var p = num(pctId);
+    if (isNaN(p) || e <= 0) { $(pxId).value = ''; return; }
+    var up = (which === 'tg') === long;
+    $(pxId).value = String(+(e * (1 + (up ? p : -p) / 100)).toFixed(2));
+  }
+  function pctFromPx(which) {
+    var e = val('tgEntry'), long = isLong('tg');
+    var pctId = which === 'tg' ? 'tgPct' : 'slPct', pxId = which === 'tg' ? 'tgPx' : 'slPx';
+    var px = num(pxId);
+    if (isNaN(px) || e <= 0) { $(pctId).value = ''; return; }
+    var up = (which === 'tg') === long;
+    var d = up ? (px - e) : (e - px);
+    $(pctId).value = String(+(d / e * 100).toFixed(2));
+  }
+  function calcTG() {
+    var e = val('tgEntry'), q = val('tgQty'), tp = val('tgPx'), sp = val('slPx');
+    var long = isLong('tg');
+    var tPL = tp > 0 ? (long ? tp - e : e - tp) * q : NaN;
+    var sPL = sp > 0 ? (long ? sp - e : e - sp) * q : NaN;
+    $('tgProfit').textContent = isNaN(tPL) ? '₹0.00' : inr(tPL, { sign: true });
+    $('tgLoss').textContent = isNaN(sPL) ? '₹0.00' : inr(sPL, { sign: true });
+    var rr = (tPL > 0 && sPL < 0) ? tPL / -sPL : NaN;
+    $('tgRR').textContent = isNaN(rr) ? '–' : '1 : ' + fmt(rr, 2);
+    var tMove = (e > 0 && tp > 0) ? (long ? tp - e : e - tp) / e * 100 : NaN;
+    var sMove = (e > 0 && sp > 0) ? (long ? sp - e : e - sp) / e * 100 : NaN;
+    var win = isNaN(rr) ? NaN : 100 / (1 + rr);
+    setStats('tgStats', [
+      ['Target price', tp > 0 ? inr(tp) : '–'],
+      ['Stop price', sp > 0 ? inr(sp) : '–'],
+      ['Target move', pc(tMove, true), isNaN(tMove) ? '' : cls(tMove)],
+      ['Stop move', pc(sMove, true), isNaN(sMove) ? '' : cls(sMove)],
+      ['Position value', inr(e * q)],
+      ['Break-even win rate', isNaN(win) ? '–' : fmt(win, 1) + '%']
+    ]);
+  }
+
+  /* Position size */
+  function calcSize() {
+    var cap = val('szCap'), rp = val('szRisk'), e = val('szEntry'), sl = val('szSl'), R = val('szR');
+    var riskAmt = cap * rp / 100;
+    var per = Math.abs(e - sl);
+    var ok = e > 0 && sl > 0 && per > 0;
+    var qty = 0, limited = false;
+    if (ok) {
+      var byRisk = Math.floor(riskAmt / per);
+      var byCap = Math.floor(cap / e);
+      qty = Math.min(byRisk, byCap);
+      limited = byCap < byRisk;
+    }
+    var long = sl < e;
+    var actual = qty * per;
+    var target = ok ? e + (long ? 1 : -1) * R * per : NaN;
+    $('szLbl').textContent = ok ? (long ? 'Buy quantity' : 'Short quantity') : 'Quantity';
+    $('szVal').textContent = f0.format(qty);
+    setPill('szPill', 'Risk ' + inr(actual, { d: 0 }), 'flat');
+    var note = $('szNote');
+    if (limited) { note.hidden = false; note.textContent = 'Capital caps this position. Risk is lower than the ' + pc(rp, false) + ' you set.'; }
+    else { note.hidden = true; }
+    setStats('szStats', [
+      ['Direction', ok ? (long ? 'Long' : 'Short') : '–'],
+      ['Position value', inr(qty * e)],
+      ['Share of capital', cap > 0 ? pc(qty * e / cap * 100, false) : '–'],
+      ['Risk per share', ok ? inr(per) : '–'],
+      ['Risk amount', inr(actual)],
+      ['Target at ' + (R > 0 ? fmt(R, 1) : '0') + 'R', isNaN(target) ? '–' : inr(target)],
+      ['Reward at target', ok ? inr(qty * R * per, { sign: true }) : '–', ok && R > 0 ? 'gain' : '']
+    ]);
+  }
+
+  /* Average */
+  function rowEls() { return Array.prototype.slice.call($('avRows').children); }
+  function addRow(p, q, focus) {
+    var i = ++rowSeq;
+    var d = document.createElement('div');
+    d.className = 'avrow';
+    d.innerHTML =
+      '<div class="inp"><span>₹</span><input id="avp-' + i + '" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="Price" aria-label="Buy price"></div>' +
+      '<div class="inp"><input id="avq-' + i + '" inputmode="decimal" autocomplete="off" enterkeyhint="next" placeholder="Qty" aria-label="Quantity"></div>' +
+      '<button class="rm" type="button" aria-label="Remove this buy">×</button>';
+    $('avRows').appendChild(d);
+    $('avp-' + i).value = p || '';
+    $('avq-' + i).value = q || '';
+    if (focus) $('avp-' + i).focus();
+  }
+  function calcAvg() {
+    var tq = 0, inv = 0;
+    rowEls().forEach(function (r) {
+      var ins = r.querySelectorAll('input');
+      var p = parseFloat(String(ins[0].value).replace(/,/g, '')), q = parseFloat(String(ins[1].value).replace(/,/g, ''));
+      if (isFinite(p) && isFinite(q) && q > 0) { tq += q; inv += p * q; }
+    });
+    var avg = tq > 0 ? inv / tq : 0;
+    var ltp = val('avLtp');
+    var has = ltp > 0 && tq > 0;
+    var pl = has ? (ltp - avg) * tq : NaN;
+    var plp = has && inv > 0 ? pl / inv * 100 : NaN;
+    $('avVal').textContent = inr(avg);
+    if (has) setPill('avPill', inr(pl, { sign: true }) + ' · ' + pc(plp, true), cls(pl));
+    else setPill('avPill', 'P/L –', 'flat');
+    var need = has && ltp < avg ? (avg - ltp) / ltp * 100 : NaN;
+    setStats('avStats', [
+      ['Total quantity', f0.format(tq)],
+      ['Total invested', inr(inv)],
+      ['Current value', has ? inr(ltp * tq) : '–'],
+      ['P/L', has ? inr(pl, { sign: true }) : '–', has ? cls(pl) : ''],
+      ['Return', has ? pc(plp, true) : '–', has ? cls(plp) : ''],
+      ['Rise to break even', isNaN(need) ? (has ? 'Already above' : '–') : pc(need, true)]
+    ]);
+  }
+
+  /* Invest: shares from amount, profit from sell price */
+  function calcIV() {
+    var p = val('ivBuy'), sp = val('ivSell'), amt = val('ivAmt');
+    var qty = p > 0 ? Math.floor(amt / p) : 0;
+    var inv = qty * p, left = amt - inv;
+    var hasS = sp > 0 && p > 0;
+    var ps = hasS ? sp - p : NaN;
+    var pp = hasS ? ps / p * 100 : NaN;
+    var tot = hasS ? ps * qty : NaN;
+    var tp = hasS ? (inv > 0 ? tot / inv * 100 : 0) : NaN;
+    var st = hasS ? cls(tot) : 'flat';
+    $('ivHero').setAttribute('data-state', st);
+    $('ivQty').textContent = f0.format(qty);
+    $('ivPL').textContent = hasS ? inr(tot, { sign: true }) : '₹0.00';
+    $('ivPLbl').textContent = st === 'gain' ? 'Total profit' : (st === 'loss' ? 'Total loss' : 'Total P/L');
+    $('ivFoot').textContent = 'Invested ' + inr(inv) + ' · Left ' + inr(left);
+    setPill('ivPill', hasS ? pc(tp, true) : '–', st);
+    var note = $('ivNote');
+    if (p > 0 && amt > 0 && qty === 0) { note.hidden = false; note.textContent = 'Amount is less than the price of one share.'; }
+    else if (p > 0 && !(sp > 0)) { note.hidden = false; note.textContent = 'Enter a sell price to see profit or loss.'; }
+    else { note.hidden = true; }
+    function row(label, a, b, c) {
+      return '<div class="rl">' + label + '</div><div class="rv ' + (c || '') + '">' + a + '</div><div class="rv ' + (c || '') + '">' + b + '</div>';
+    }
+    $('ivCmp').innerHTML =
+      '<div class="ch"></div><div class="ch">Per share</div><div class="ch">Total</div>' +
+      row('Buy', p > 0 ? inr(p) : '–', inr(inv)) +
+      row('Sell', sp > 0 ? inr(sp) : '–', hasS ? inr(sp * qty) : '–') +
+      row('Profit / loss', hasS ? inr(ps, { sign: true }) : '–', hasS ? inr(tot, { sign: true }) : '–', hasS ? cls(tot) : '') +
+      row('Percentage', hasS ? pc(pp, true) : '–', hasS ? pc(tp, true) : '–', hasS ? cls(tot) : '');
+  }
+
+  function calcAll() { calcIV(); calcPL(); calcTG(); calcSize(); calcAvg(); }
+
+  /* Storage (a convenience only) */
+  function statics() { return Array.prototype.slice.call(document.querySelectorAll('input[data-k]')); }
+  function save() {
+    try {
+      var o = { tab: state.tab, sides: state.sides, f: {}, rows: [] };
+      statics().forEach(function (el) { o.f[el.id] = el.value; });
+      rowEls().forEach(function (r) { var ins = r.querySelectorAll('input'); o.rows.push([ins[0].value, ins[1].value]); });
+      localStorage.setItem(KEY, JSON.stringify(o));
+    } catch (e) {}
+  }
+  function load() {
+    try { var s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
+  }
+
+  function showTab(t) {
+    state.tab = t;
+    ['iv', 'pl', 'tg', 'sz', 'av'].forEach(function (k) {
+      $('panel-' + k).hidden = k !== t;
+      $('tab-' + k).setAttribute('aria-selected', k === t ? 'true' : 'false');
+    });
+  }
+  function showSides() {
+    document.querySelectorAll('.seg').forEach(function (g) {
+      var k = g.getAttribute('data-seg');
+      g.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute('data-side') === state.sides[k] ? 'true' : 'false');
+      });
+    });
+  }
+  function hideTag() { $('exTag').hidden = true; }
+
+  /* Init */
+  var saved = load();
+  if (saved && saved.f) {
+    if (saved.sides) { state.sides.pl = saved.sides.pl === 'short' ? 'short' : 'long'; state.sides.tg = saved.sides.tg === 'short' ? 'short' : 'long'; }
+    statics().forEach(function (el) { el.value = saved.f[el.id] != null ? saved.f[el.id] : ''; });
+    (saved.rows && saved.rows.length ? saved.rows : [['', ''], ['', '']]).forEach(function (r) { addRow(r[0], r[1]); });
+    if (['iv', 'pl', 'tg', 'sz', 'av'].indexOf(saved.tab) >= 0) state.tab = saved.tab;
+    hideTag();
+  } else {
+    statics().forEach(function (el) { el.value = DEFAULTS[el.id] || ''; });
+    pxFromPct('tg'); pxFromPct('sl');
+    ROWS_DEFAULT.forEach(function (r) { addRow(r[0], r[1]); });
+  }
+  showTab(state.tab);
+  showSides();
+  calcAll();
+
+  /* Events */
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'INPUT') return;
+    var v = t.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+    var i = v.indexOf('.');
+    if (i >= 0) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/\./g, '');
+    if (v !== t.value) t.value = v;
+    var id = t.id;
+    if (id === 'tgPct') pxFromPct('tg');
+    else if (id === 'tgPx') pctFromPx('tg');
+    else if (id === 'slPct') pxFromPct('sl');
+    else if (id === 'slPx') pctFromPx('sl');
+    else if (id === 'tgEntry') { pxFromPct('tg'); pxFromPct('sl'); }
+    hideTag();
+    calcAll();
+    save();
+  });
+
+  document.addEventListener('focusin', function (e) {
+    var t = e.target;
+    if (t && t.tagName === 'INPUT') setTimeout(function () { try { t.select(); } catch (err) {} }, 0);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || !e.target || e.target.tagName !== 'INPUT') return;
+    e.preventDefault();
+    var panel = e.target.closest('.panel');
+    var ins = Array.prototype.slice.call(panel.querySelectorAll('input'));
+    var n = ins.indexOf(e.target);
+    if (n >= 0 && n < ins.length - 1) ins[n + 1].focus(); else e.target.blur();
+  });
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.classList.contains('tab')) { showTab(b.getAttribute('data-tab')); window.scrollTo(0, 0); save(); return; }
+    if (b.closest('.seg')) {
+      state.sides[b.closest('.seg').getAttribute('data-seg')] = b.getAttribute('data-side');
+      showSides();
+      if (b.closest('.seg').getAttribute('data-seg') === 'tg') { pxFromPct('tg'); pxFromPct('sl'); }
+      hideTag(); calcAll(); save(); return;
+    }
+    if (b.classList.contains('chip')) {
+      var target = $(b.parentNode.getAttribute('data-chips'));
+      target.value = b.getAttribute('data-v');
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+    if (b.id === 'addRow') { addRow('', '', true); save(); return; }
+    if (b.classList.contains('rm')) {
+      var row = b.closest('.avrow');
+      if (rowEls().length > 1) row.remove();
+      else row.querySelectorAll('input').forEach(function (x) { x.value = ''; });
+      hideTag(); calcAvg(); save(); return;
+    }
+    if (b.id === 'clearBtn') {
+      statics().forEach(function (el) { el.value = ''; });
+      $('avRows').innerHTML = '';
+      addRow('', ''); addRow('', '');
+      hideTag(); calcAll(); save();
+      var first = $('panel-' + state.tab).querySelector('input');
+      if (first) first.focus();
+    }
+  });
+})();
+</script>
+
+</body></html>
